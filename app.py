@@ -2,17 +2,19 @@ import os
 import string
 import time
 
-from flask import Flask, request, flash, redirect, send_from_directory, jsonify
+from flask import Flask, request, redirect, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 
 curr_path = os.getcwd()
 UPLOAD_FOLDER = curr_path + '/UPLOADS/'
 RESOURCE_FOLDER = curr_path + '/resources'
+ERROR_LOG = curr_path + '/ERROR_LOG_CIO.txt'
 ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['RESOURCES'] = RESOURCE_FOLDER
+app.config['ERROR_LOG'] = ERROR_LOG
 
 
 @app.route('/')
@@ -29,7 +31,7 @@ def get_icon():
 def get_file_list():
     if request.method == 'GET':
         files = os.listdir(UPLOAD_FOLDER)
-        accurate_names = set(map(latest_filename_version, files))
+        accurate_names = set(map(server_side_name_to_filename, files))  # TODO: Check if correct
         return jsonify(list(accurate_names))
 
 
@@ -80,7 +82,7 @@ def get_file(filename_unchecked):
         return redirect('/', code=400)
 
 
-# TODO: (maybe) move, (maybe) archive, name differentiation
+# TODO: (maybe) move, (maybe) archive
 
 
 @app.route('/rename_file', methods=['POST'])
@@ -116,12 +118,32 @@ def rename_file():
 
 @app.errorhandler(413)
 def request_entity_too_large(error):
+    write_to_error_log(error)
     return redirect('/', 413)
 
 
-# used in implementing name differentiation - whenever we store a file append current local time.
+@app.errorhandler(500)
+def internal_server_error(error):
+    write_to_error_log(error)
+    return redirect('/', 500)
+
+
+# We're getting the latest filename.
+# Recall that names on server are name^numbers.numbers.cio
+# while name requested is name.cio
 def latest_filename_version(filename):
-    return filename  # TODO: get latest filename version
+    files = os.listdir(app.config['UPLOAD_FOLDER'])
+    filename_prefix = filename.split('.')[0]  # name part of request
+    curr_latest_filename = None
+    curr_timestamp = 0.0
+    for filename_of_list in files:
+        if filename_prefix == filename_of_list.split('_', 1)[0]:  # name == name
+            numbers = filename_of_list.rsplit('_', 1)[1].rsplit('.', 2)
+            file_timestamp = float(numbers[0] + '.' + numbers[1])  # reconstruct number.number as float
+            if curr_latest_filename is None or curr_timestamp < file_timestamp:
+                curr_latest_filename = filename_of_list
+                curr_timestamp = file_timestamp
+    return curr_latest_filename
 
 
 def filename_to_server_side_name(filename):
@@ -164,6 +186,11 @@ def acceptable_file(filename):
     return True
 
 
+def write_to_error_log(s:string):
+    with open(ERROR_LOG, 'a') as error_log_file:
+        error_log_file.write(s)  # Write to the error log
+
+
 if __name__ == '__main__':
     app.secret_key = 'super secret key'
     app.config['SESSION_TYPE'] = 'filesystem'
@@ -173,4 +200,8 @@ if __name__ == '__main__':
         os.mkdir(UPLOAD_FOLDER)
     if not os.path.isdir(UPLOAD_FOLDER):
         raise Exception("No upload folder was reachable. Perhaps", UPLOAD_FOLDER, "already exists.")
+    if not os.path.isfile(ERROR_LOG):
+        with open(ERROR_LOG, 'w') as error_log_file:
+            error_log_file.write(('-'*5 + ' CloudIO Error Log ' + '-'*5))  # Create the error log
+
     app.run(host='0.0.0.0', port=8000, threaded=True)
