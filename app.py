@@ -45,8 +45,15 @@ def upload_file():
         sec_filename = secure_filename(filename_unchecked)
 
         if acceptable_file(filename_unchecked) and acceptable_file(sec_filename):
+            # Make sure path is available (should be, but check for safety)
+            path = os.path.join(app.config['UPLOAD_FOLDER'], filename_to_server_side_name(sec_filename))
+            for i in range(100):
+                if not os.path.exists(path): break
+                path = os.path.join(app.config['UPLOAD_FOLDER'], filename_to_server_side_name(sec_filename))
+                if i == 100:
+                    return redirect('/', code=504)
 
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename_to_server_side_name(sec_filename)))
+            file.save()
             return redirect('/list_files', code=302)  # TODO: Perhaps should be changed.
 
         else:  # Unacceptable filename.
