@@ -1,11 +1,14 @@
 import os
+import string
+import time
+
 from flask import Flask, request, flash, redirect, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 
 curr_path = os.getcwd()
 UPLOAD_FOLDER = curr_path + '/UPLOADS/'
 RESOURCE_FOLDER = curr_path + '/resources'
-ALLOWED_EXTENSIONS = {'txt', 'png', 'gif', 'pdf', 'wav'}
+ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -13,8 +16,13 @@ app.config['RESOURCES'] = RESOURCE_FOLDER
 
 
 @app.route('/')
-def nothing():
+def get_main_page():
     return send_from_directory(app.config['RESOURCES'], 'gif.gif', mimetype='image/gif')
+
+
+@app.route('/favicon.ico')
+def get_icon():
+    return send_from_directory(app.config['RESOURCES'], 'icon.ico', mimetype='image/ico')
 
 
 @app.route('/list_files', methods=['GET'])
@@ -110,16 +118,43 @@ def latest_filename_version(filename):
 
 
 def filename_to_server_side_name(filename):
-    return filename  # TODO: name differentiation
+    # Lets be defensive and assert that the name is safe:
+    if not acceptable_file(filename) or secure_filename(filename) != filename:
+        raise Exception("Server asked to translate unsafe filename; won't do that.")
+
+    # Now we pull the name apart and ...
+    filename_fragments = filename.split('.', 1)
+    # ... put it back together with _[time.time()] before the file extension
+    time_now = time.time()
+    server_side_name = filename_fragments[0] + "_" + str(time_now) + '.' + filename_fragments[1]
+
+    return server_side_name
 
 
 def server_side_name_to_filename(server_side_name):
-    return server_side_name  # TODO: reverse name differentiation
+    # Split up the server_side_name to remove the time.time()
+    server_side_name_fragments = server_side_name.rsplit('_')
+    fragment_amount = len(server_side_name_fragments)
+    server_side_name_suffix = server_side_name_fragments[fragment_amount - 1]
+    file_ext = server_side_name_suffix.rsplit('.')[-1]  # ext is the last bit
+
+    # Put it all back together.
+    filename = server_side_name_fragments[0]
+    for idx in range(1, fragment_amount - 2):
+        filename += '_' + server_side_name_fragments[idx]
+    filename += '.' + file_ext
+
+    return filename
 
 
 def acceptable_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS and len(
-        filename.rsplit('/')) == 1
+    if '.' not in filename: return False
+    filename_fragments = filename.rsplit('.', 1)
+    if filename_fragments[1].lower() not in ALLOWED_EXTENSIONS: return False
+    for char in filename_fragments[0]:
+        if char not in string.hexdigits:
+            return False
+    return True
 
 
 if __name__ == '__main__':
