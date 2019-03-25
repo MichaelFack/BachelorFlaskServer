@@ -1,20 +1,25 @@
+import os
 import random
 import string
 import unittest
 
-from app import filename_to_server_side_name, server_side_name_to_filename, latest_filename_version, acceptable_file
+
+import app
+
+test_folder = 'TEST_FOLDER'
 
 
 class TestFilenaming(unittest.TestCase):
     def setUp(self):
-        pass
+        app.UPLOAD_FOLDER = 'TEST_FOLDER'  # Change upload folder for the test
+        self.clean_test_folder()
 
     def test_accepts_acceptable_names(self):
         for i in range(10000):
             n = random.randint(10, 20)
             s = ''.join(random.choices(string.hexdigits, k=n))
             s += '.cio'
-            self.assertTrue(acceptable_file(s))
+            self.assertTrue(app.acceptable_file(s))
 
     def test_rejects_unacceptable_file_ext(self):
         for i in range(10000):
@@ -25,7 +30,7 @@ class TestFilenaming(unittest.TestCase):
             if ext == 'cio':
                 continue
             s += ext
-            self.assertFalse(acceptable_file(s))
+            self.assertFalse(app.acceptable_file(s))
 
     def test_rejects_unacceptable_filename(self):
         for i in range(10000):
@@ -40,13 +45,85 @@ class TestFilenaming(unittest.TestCase):
                 continue
             ext = '.cio'
             s += ext
-            self.assertFalse(acceptable_file(s))
+            self.assertFalse(app.acceptable_file(s))
 
     def test_filenames_converted_to_server_side_name_can_be_converted_back(self):
         for i in range(10000):
             n = random.randint(10, 20)
             s = ''.join(random.choices(string.hexdigits, k=n))
             s += '.cio'
-            ssn = filename_to_server_side_name(s)
-            s_ = server_side_name_to_filename(ssn)
+            ssn = app.filename_to_server_side_name(s)
+            s_ = app.server_side_name_to_filename(ssn)
             self.assertTrue(s == s_, s + " != " + s_+ " where ssn = " + ssn)
+
+    def test_list_files_gets_list_of_unique_file(self):
+        self.assertTrue(os.path.isdir(test_folder), "expect 'TEST_FOLDER' to be a dir.")
+        # Create a bunch of files with random names
+        for i in range(10):
+            self.create_test_file('test' + str(i) + '_123.123.cio')
+            self.create_test_file('test' + str(i) + '_1234.123.cio')
+            self.create_test_file('test' + str(i) + '_12345.121.cio')
+            self.create_test_file('test' + str(i) + '_12345.123.cio')
+            self.create_test_file('test' + str(i) + '_12345.12345.cio')
+        # get the actual names of the files.
+        filenames_in_dir = os.listdir(test_folder)
+        self.assertTrue(len(filenames_in_dir) == 50)
+        files_listed_uniquely = app.get_filenames_from_serversidenames_stored()
+        self.check_server_side_names_are_listed_uniquely(files_listed_uniquely, filenames_in_dir)
+
+    def check_server_side_names_are_listed_uniquely(self, files_listed_uniquely, filenames_in_dir):
+        file_names_seen = []
+        for file_named in filenames_in_dir:
+            self.assertTrue(app.server_side_name_to_filename(file_named) in files_listed_uniquely,
+                            "Expected " + file_named
+                            + " to be in file_list as "
+                            + app.server_side_name_to_filename(file_named))
+            self.assertFalse(file_named in file_names_seen)
+            file_names_seen.append(file_named)
+
+    def test_get_latest_gets_latest(self):
+        self.assertTrue(os.path.isdir(test_folder), "expect 'TEST_FOLDER' to be a dir.")
+        self.create_test_file('test_123.123.cio')
+        self.create_test_file('test_1234.123.cio')
+        self.create_test_file('test_12345.121.cio')
+        self.create_test_file('test_12345.123.cio')
+        self.create_test_file('test_12344.125.cio')
+        self.assertTrue(app.latest_filename_version('test.cio') == 'test_12345.123.cio')
+
+    # def test_can_save_file(self):  # TODO: Write this test.
+
+    def test_new_files_are_listed_uniquely(self):
+        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
+        for i in range(100):
+            self.create_test_file('test' + str(i) + '_123.123.cio')
+        files_listed_uniquely = app.get_filenames_from_serversidenames_stored()
+        self.create_test_file('example_123.123.cio')
+        files_listed_uniquely_with_new_file = app.get_filenames_from_serversidenames_stored()
+        self.assertFalse(files_listed_uniquely == files_listed_uniquely_with_new_file,
+                         'Expected new file to have been added.')
+        for name in files_listed_uniquely_with_new_file:
+            self.assertTrue(name in files_listed_uniquely or name == 'example.cio',
+                            'Expect ' + name + ' in previous listing or to be the newly added.')
+
+    def create_test_file(self, test_file_name):
+        with open(os.path.join(test_folder, test_file_name), 'w') as file:
+            file.write('This is for a test.')
+
+    def clean_test_folder(self):
+        files_in_testfolder = os.listdir('TEST_FOLDER')
+        if 0 != len(files_in_testfolder):
+            for filename in files_in_testfolder:
+                os.remove(os.path.join('TEST_FOLDER', filename))
+
+    def test_can_rename_files(self):
+        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
+        pre_rename_name = 'testbefore_123.123.cio'
+        post_rename_name = '123.cio'  # has to be safe
+        self.create_test_file(pre_rename_name)
+        filenames_in_dir = os.listdir('TEST_FOLDER')
+        self.assertTrue(len(filenames_in_dir) == 1)
+        self.assertTrue(pre_rename_name in filenames_in_dir)
+        app.rename_file(pre_rename_name, post_rename_name)
+        filenames_in_dir = os.listdir('TEST_FOLDER')
+        self.assertTrue(len(filenames_in_dir) == 1)
+        self.assertTrue(app.server_side_name_to_filename(filenames_in_dir[0]) == post_rename_name)

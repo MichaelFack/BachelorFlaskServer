@@ -1,3 +1,4 @@
+import json
 import os
 import string
 import time
@@ -7,32 +8,33 @@ from werkzeug.utils import secure_filename
 
 curr_path = os.getcwd()
 UPLOAD_FOLDER = curr_path + '/UPLOADS/'
-RESOURCE_FOLDER = curr_path + '/resources'
+RESOURCE_FOLDER = curr_path + '/resources/'
 ERROR_LOG = curr_path + '/ERROR_LOG_CIO.txt'
 ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['RESOURCES'] = RESOURCE_FOLDER
-app.config['ERROR_LOG'] = ERROR_LOG
 
 
 @app.route('/')
 def get_main_page():
-    return send_from_directory(app.config['RESOURCES'], 'gif.gif', mimetype='image/gif')
+    return send_from_directory(RESOURCE_FOLDER, 'gif.gif', mimetype='image/gif')
 
 
 @app.route('/favicon.ico')
 def get_icon():
-    return send_from_directory(app.config['RESOURCES'], 'icon.ico', mimetype='image/ico')
+    return send_from_directory(RESOURCE_FOLDER, 'icon.ico', mimetype='image/ico')
 
 
 @app.route('/list_files', methods=['GET'])
-def get_file_list():
+def get_list_files_response():
     if request.method == 'GET':
-        files = os.listdir(UPLOAD_FOLDER)
-        accurate_names = set(map(server_side_name_to_filename, files))  # TODO: Check if correct
-        return jsonify(list(accurate_names))
+        return jsonify(get_filenames_from_serversidenames_stored())
+
+
+def get_filenames_from_serversidenames_stored():
+    files = os.listdir(UPLOAD_FOLDER)
+    accurate_names = set(map(server_side_name_to_filename, files))  # TODO: Check if correct
+    return list(accurate_names)
 
 
 @app.route('/upload_file', methods=['POST'])
@@ -48,19 +50,35 @@ def upload_file():
 
         if acceptable_file(filename_unchecked) and acceptable_file(sec_filename):
             # Make sure path is available (should be, but check for safety)
-            path = os.path.join(app.config['UPLOAD_FOLDER'], filename_to_server_side_name(sec_filename))
-            for i in range(100):
-                if not os.path.exists(path): break
-                path = os.path.join(app.config['UPLOAD_FOLDER'], filename_to_server_side_name(sec_filename))
-                if i == 100:
-                    return redirect('/', code=504)
+            avail_filename, success = get_available_name(sec_filename)
 
-            file.save()
-            return redirect('/list_files', code=302)  # TODO: Perhaps should be changed.
+            if success:
+                save_file_as(file, avail_filename)
+                return redirect('/list_files', code=302)  # TODO: Perhaps should be changed.
+            else:
+                return redirect('/', code=504)  # Should never happen, probably.
 
         else:  # Unacceptable filename.
-
             return redirect('/', code=400)
+
+
+def save_file_as(file, filename):
+    write_to_error_log('File is instance of ' + str(type(file)))
+    file.save(os.path.join(UPLOAD_FOLDER, filename))  # TODO: Test this (somehow)
+
+
+def get_available_name(sec_filename):
+    success = True
+    avail_filename = filename_to_server_side_name(sec_filename)
+    path = os.path.join(UPLOAD_FOLDER, avail_filename)
+    for i in range(100):
+        if not os.path.exists(path): break
+        avail_filename = filename_to_server_side_name(sec_filename)
+        path = os.path.join(UPLOAD_FOLDER, avail_filename)
+        if i == 100:
+            success = False
+            avail_filename = None
+    return avail_filename, success
 
 
 @app.route('/get_file/<string:filename_unchecked>', methods=['GET'])
@@ -72,10 +90,10 @@ def get_file(filename_unchecked):
             and acceptable_file(sec_filename):
 
         latest_filename = latest_filename_version(sec_filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], latest_filename)
+        file_path = os.path.join(UPLOAD_FOLDER, latest_filename)
 
         if os.path.exists(file_path) and os.path.isfile(file_path):
-            return send_from_directory(app.config['UPLOAD_FOLDER'], latest_filename)
+            return send_from_directory(UPLOAD_FOLDER, latest_filename)  # TODO: Test this - might be wrong name
         else:
             return redirect('/', code=400)
     else:
@@ -86,7 +104,7 @@ def get_file(filename_unchecked):
 
 
 @app.route('/rename_file', methods=['POST'])
-def rename_file():
+def rename_file_request():
     if request.method == 'POST':
 
         new_filename_unchecked = request.args.get("old_name", None)
@@ -109,11 +127,20 @@ def rename_file():
                 or not os.path.isfile(UPLOAD_FOLDER + latest_filename):
             return redirect('/', code=400)  # Something with the name is bad, or the file doesn't exist.
         # valid names and file exists.
-        os.rename(latest_filename,
-                  filename_to_server_side_name(sec_new_filename))
-        return redirect('/', code=200)
+        success = rename_file(latest_filename, sec_new_filename)
+        if success:
+            return redirect('/', code=200)
+        else:
+            return redirect('/', code=502)
     else:
         return redirect('/', code=400)  # Bad request.
+
+
+def rename_file(latest_filename, sec_new_filename):
+    avail_name, success = get_available_name(sec_new_filename)
+    if success:
+        os.rename(os.path.join(UPLOAD_FOLDER, latest_filename), os.path.join(UPLOAD_FOLDER, avail_name))
+    return success
 
 
 @app.errorhandler(413)
@@ -132,7 +159,7 @@ def internal_server_error(error):
 # Recall that names on server are name^numbers.numbers.cio
 # while name requested is name.cio
 def latest_filename_version(filename):
-    files = os.listdir(app.config['UPLOAD_FOLDER'])
+    files = os.listdir(UPLOAD_FOLDER)
     filename_prefix = filename.split('.')[0]  # name part of request
     curr_latest_filename = None
     curr_timestamp = 0.0
@@ -188,7 +215,7 @@ def acceptable_file(filename):
 
 def write_to_error_log(s:string):
     with open(ERROR_LOG, 'a') as error_log_file:
-        error_log_file.write(s)  # Write to the error log
+        error_log_file.write('\n' + s)  # Write to the error log
 
 
 if __name__ == '__main__':
