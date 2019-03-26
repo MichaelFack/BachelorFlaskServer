@@ -1,18 +1,26 @@
 import json
 import os
+import secrets
 import string
 import time
 
 from flask import Flask, request, redirect, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
+from flask_login import LoginManager, login_user
 
 curr_path = os.getcwd()
-UPLOAD_FOLDER = curr_path + '/UPLOADS/'
-RESOURCE_FOLDER = curr_path + '/resources/'
-ERROR_LOG = curr_path + '/ERROR_LOG_CIO.txt'
+UPLOAD_FOLDER = os.path.join(curr_path, 'UPLOADS')
+RESOURCE_FOLDER = os.path.join(curr_path, 'resources')
+ADMIN_FOLDER = os.path.join(curr_path, 'ADMIN')
+ERROR_LOG = os.path.join(curr_path, 'ADMIN', 'ERROR_LOG_CIO.txt')  # TODO: Might leak info?
+USER_CATALOG = os.path.join(curr_path, 'ADMIN', 'USERS.txt')  # TODO: Consider encrypting this somehow?
+USER_RECENT_CHALLENGES = os.path.join(curr_path, 'ADMIN', 'CHALLENGES.txt')
 ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
+LOGIN_CHALLENGE_LENGTH = 32
+
 
 app = Flask(__name__)
+login_manager = LoginManager()
 
 
 @app.route('/')
@@ -48,7 +56,7 @@ def upload_file():
         filename_unchecked = file.filename
         sec_filename = secure_filename(filename_unchecked)
 
-        if acceptable_file(filename_unchecked) and acceptable_file(sec_filename):
+        if acceptable_filename(filename_unchecked) and acceptable_filename(sec_filename):
             # Make sure path is available (should be, but check for safety)
             avail_filename, success = get_available_name(sec_filename)
 
@@ -86,14 +94,14 @@ def get_file(filename_unchecked):
 
     sec_filename = secure_filename(filename_unchecked)
 
-    if request.method == 'GET' and acceptable_file(filename_unchecked)\
-            and acceptable_file(sec_filename):
+    if request.method == 'GET' and acceptable_filename(filename_unchecked)\
+            and acceptable_filename(sec_filename):
 
         latest_filename = latest_filename_version(sec_filename)
         file_path = os.path.join(UPLOAD_FOLDER, latest_filename)
 
         if os.path.exists(file_path) and os.path.isfile(file_path):
-            return send_from_directory(UPLOAD_FOLDER, latest_filename)  # TODO: Test this - might be wrong name
+            return send_from_directory(UPLOAD_FOLDER, latest_filename)
         else:
             return redirect('/', code=400)
     else:
@@ -117,14 +125,13 @@ def rename_file_request():
         sec_new_filename = secure_filename(new_filename_unchecked)
         sec_old_filename = secure_filename(old_filename_unchecked)  # get new secure filenames.
 
-        latest_filename = latest_filename_version(sec_new_filename)  # what's the real name of the file?
+        latest_filename = latest_filename_version(sec_old_filename)  # what's the real name of the file?
 
-        if not acceptable_file(new_filename_unchecked) \
-                or not acceptable_file(old_filename_unchecked) \
-                or not acceptable_file(sec_new_filename) \
-                or not acceptable_file(sec_old_filename) \
-                or not os.path.exists(UPLOAD_FOLDER + latest_filename) \
-                or not os.path.isfile(UPLOAD_FOLDER + latest_filename):
+        if not acceptable_filename(new_filename_unchecked) \
+                or not acceptable_filename(old_filename_unchecked) \
+                or not acceptable_filename(sec_new_filename) \
+                or not acceptable_filename(sec_old_filename) \
+                or not os.path.isfile(os.path.join(UPLOAD_FOLDER, latest_filename)):
             return redirect('/', code=400)  # Something with the name is bad, or the file doesn't exist.
         # valid names and file exists.
         success = rename_file(latest_filename, sec_new_filename)
@@ -140,6 +147,9 @@ def rename_file(latest_filename, sec_new_filename):
     avail_name, success = get_available_name(sec_new_filename)
     if success:
         os.rename(os.path.join(UPLOAD_FOLDER, latest_filename), os.path.join(UPLOAD_FOLDER, avail_name))
+    else:
+        write_to_error_log('Could not determine available name for file "'
+                           + latest_filename + '" as "' + sec_new_filename + '".')
     return success
 
 
@@ -175,7 +185,7 @@ def latest_filename_version(filename):
 
 def filename_to_server_side_name(filename):
     # Lets be defensive and assert that the name is safe:
-    if not acceptable_file(filename) or secure_filename(filename) != filename:
+    if not acceptable_filename(filename) or secure_filename(filename) != filename:
         raise Exception("Server asked to translate unsafe filename; won't do that.")
 
     # Now we pull the name apart and ...
@@ -203,7 +213,7 @@ def server_side_name_to_filename(server_side_name):
     return filename
 
 
-def acceptable_file(filename):
+def acceptable_filename(filename):
     if '.' not in filename: return False
     filename_fragments = filename.rsplit('.', 1)
     if filename_fragments[1].lower() not in ALLOWED_EXTENSIONS: return False
@@ -218,17 +228,92 @@ def write_to_error_log(s:string):
         error_log_file.write('\n' + s)  # Write to the error log
 
 
+@app.route('/login', methods=['GET', 'POST'])  # Step 1 in login in; being issued a challenge.
+def login():
+    if request.method == 'GET':
+        user_id = request.args.get('user_id', None)
+        challenge = issue_challenge(user_id)
+        return challenge
+    elif request.method == 'POST':
+        user_id = request.args.get('user_id', None)
+        if user_id is None:
+            redirect('/', code=401)
+        challenge_response = request.args.get('challenge_response', None)
+        if challenge_response is None:
+            redirect('/', code=401)
+        latest_challenge = get_latest_challenge(user_id)
+        if latest_challenge is None:
+            redirect('/', code=401)
+        if valid_challenge_response(user_id, latest_challenge, challenge_response):
+            login_user(user_id)
+            return redirect('/', code=200)
+        return redirect('/', code=401)
+    return redirect('/', code=400)  # Should not happen; flask denies request of wrong method.
+
+
+def issue_challenge(user_id):
+    challenge_time = time.time()
+    challenge = secrets.token_hex(LOGIN_CHALLENGE_LENGTH)
+    if user_exists(user_id):
+        log_latest_challenge(user_id, challenge, challenge_time)
+    return challenge
+
+
+def user_exists(USER_IDENTIFIER):
+    for user in get_users():  # Should be fine as long as |users| < a lot
+        if user.USER_IDENTIFIER == USER_IDENTIFIER:
+            return True
+    return False
+
+
+def get_users():
+    if not os.path.isfile(USER_CATALOG):
+        return []
+    with open(USER_CATALOG, 'r') as file:
+        return json.load(file)
+
+
+def log_latest_challenge(USER_IDENTIFIER, challenge, challenge_time):
+    pass  # TODO
+
+
+def get_latest_challenge(USER_IDENTIFIER):
+    pass  # TODO
+
+
+def valid_challenge_response(user_id, latest_challenge, challenge_response):
+    pass  # TODO
+
+
+def create_user(USER_IDENTIFIER, HASH_IDENTIFIER):
+    if not os.path.isfile(USER_CATALOG):
+        with open(USER_CATALOG, 'w+') as file:
+            json.dump([(USER_IDENTIFIER, HASH_IDENTIFIER)], file)
+    else:
+        with open(USER_CATALOG, 'r') as file:
+            users = json.load(file)  # List?
+        if USER_IDENTIFIER in map(lambda x: x[0], users):
+            return False
+        users.append((USER_IDENTIFIER, HASH_IDENTIFIER))
+        with open(USER_CATALOG, 'w') as file:
+            json.dump(users, file)
+    return True
+
+
 if __name__ == '__main__':
     app.secret_key = 'super secret key'
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024
+    login_manager.init_app(app)
 
+    if not os.path.exists(ADMIN_FOLDER):
+        os.mkdir(ADMIN_FOLDER)
     if not os.path.exists(UPLOAD_FOLDER):
         os.mkdir(UPLOAD_FOLDER)
     if not os.path.isdir(UPLOAD_FOLDER):
         raise Exception("No upload folder was reachable. Perhaps", UPLOAD_FOLDER, "already exists.")
     if not os.path.isfile(ERROR_LOG):
-        with open(ERROR_LOG, 'w') as error_log_file:
+        with open(ERROR_LOG, 'w') as error_log_file:  # Errorlog should exist.
             error_log_file.write(('-'*5 + ' CloudIO Error Log ' + '-'*5))  # Create the error log
 
     app.run(host='0.0.0.0', port=8000, threaded=True)

@@ -9,9 +9,11 @@ import app
 test_folder = 'TEST_FOLDER'
 
 
-class TestFilenaming(unittest.TestCase):
+class TestFileNaming(unittest.TestCase):
     def setUp(self):
         app.UPLOAD_FOLDER = 'TEST_FOLDER'  # Change upload folder for the test
+        if not os.path.exists(app.UPLOAD_FOLDER):  # Create the test folder
+            os.mkdir(app.UPLOAD_FOLDER)
         self.clean_test_folder()
 
     def test_accepts_acceptable_names(self):
@@ -19,7 +21,7 @@ class TestFilenaming(unittest.TestCase):
             n = random.randint(10, 20)
             s = ''.join(random.choices(string.hexdigits, k=n))
             s += '.cio'
-            self.assertTrue(app.acceptable_file(s))
+            self.assertTrue(app.acceptable_filename(s))
 
     def test_rejects_unacceptable_file_ext(self):
         for i in range(10000):
@@ -30,7 +32,7 @@ class TestFilenaming(unittest.TestCase):
             if ext == 'cio':
                 continue
             s += ext
-            self.assertFalse(app.acceptable_file(s))
+            self.assertFalse(app.acceptable_filename(s))
 
     def test_rejects_unacceptable_filename(self):
         for i in range(10000):
@@ -45,7 +47,7 @@ class TestFilenaming(unittest.TestCase):
                 continue
             ext = '.cio'
             s += ext
-            self.assertFalse(app.acceptable_file(s))
+            self.assertFalse(app.acceptable_filename(s))
 
     def test_filenames_converted_to_server_side_name_can_be_converted_back(self):
         for i in range(10000):
@@ -127,3 +129,43 @@ class TestFilenaming(unittest.TestCase):
         filenames_in_dir = os.listdir('TEST_FOLDER')
         self.assertTrue(len(filenames_in_dir) == 1)
         self.assertTrue(app.server_side_name_to_filename(filenames_in_dir[0]) == post_rename_name)
+
+
+class TestLoginProcedure(unittest.TestCase):
+    def setUp(self):
+        app.ADMIN_FOLDER = 'TEST_ADMIN'  # Change admin folder for the test
+        app.USER_CATALOG = os.path.join(app.ADMIN_FOLDER, 'USERS.txt')
+        app.USER_RECENT_CHALLENGES = os.path.join(app.ADMIN_FOLDER, 'CHALLENGES.txt')
+        if not os.path.exists(app.ADMIN_FOLDER):  # Create the test folder
+            os.mkdir(app.ADMIN_FOLDER)
+        if os.path.isfile(app.USER_CATALOG):
+            os.remove(app.USER_CATALOG)
+        self.clean_admin_folder()
+
+    def test_can_create_user(self):
+        self.assertTrue(len(app.get_users()) == 0)  # There should be none.
+        app.create_user('ABCD', '12345')
+        self.assertTrue(len(app.get_users()) == 1)  # Now we have created one.
+        app.create_user('ABCDE', '12345')
+        self.assertTrue(len(app.get_users()) == 2)  # Now we have created two.
+
+    def test_cannot_create_one_of_same_identifier(self):
+        self.assertTrue(len(app.get_users()) == 0)  # There should be none.
+        app.create_user('ABCD', '12345')
+        self.assertTrue(len(app.get_users()) == 1)  # Now we have created one.
+        app.create_user('ABCD', '67890')
+        self.assertTrue(len(app.get_users()) == 1)  # We still have just one.
+        self.assertTrue(['ABCD', '12345'] in app.get_users(), '' + str(app.get_users()))
+
+    def test_can_login(self):
+        assert False  # Challenge mode not determined yet.
+        app.create_user('ABC', '12345')
+        challenge = app.issue_challenge('ABC')
+        self.assertTrue(app.get_latest_challenge('ABC') == challenge)
+        # challenge_response = ???
+
+    def clean_admin_folder(self):
+        files_in_testfolder = os.listdir('TEST_ADMIN')
+        if 0 != len(files_in_testfolder):
+            for filename in files_in_testfolder:
+                os.remove(os.path.join('TEST_ADMIN', filename))
