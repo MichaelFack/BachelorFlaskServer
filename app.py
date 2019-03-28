@@ -159,9 +159,15 @@ def request_entity_too_large(error):
     return redirect('/', 413)
 
 
+@app.errorhandler(404)
+def not_found(error):
+    write_to_error_log(error)
+    redirect('/', code=404)
+
+
 @app.errorhandler(500)
 def internal_server_error(error):
-    write_to_error_log(str(error))
+    write_to_error_log(error)
     return redirect('/', 500)
 
 
@@ -223,7 +229,9 @@ def acceptable_filename(filename):
     return True
 
 
-def write_to_error_log(s: string):
+def write_to_error_log(s):
+    if type(s) is not str:
+        s = str(s)
     with open(ERROR_LOG, 'a') as error_log_file:
         error_log_file.write('\n' + s)  # Write to the error log
 
