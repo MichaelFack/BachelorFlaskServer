@@ -4,7 +4,7 @@ import secrets
 import string
 import time
 
-from flask import Flask, request, redirect, send_from_directory, jsonify
+from flask import Flask, request, redirect, send_from_directory, jsonify, Response
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user
 
@@ -17,6 +17,18 @@ USER_CATALOG = os.path.join(curr_path, 'ADMIN', 'USERS.txt')  # TODO: Consider e
 USER_RECENT_CHALLENGES = os.path.join(curr_path, 'ADMIN', 'CHALLENGES.txt')
 ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
 LOGIN_CHALLENGE_LENGTH = 32
+
+
+def bad_request(): return Response(status=400)
+
+
+def successful_request(): return Response(status=200)
+
+
+def internal_server_error_response(): return Response(status=500)
+
+
+def file_not_found_response(): return Response(status=404)
 
 
 app = Flask(__name__)
@@ -62,12 +74,12 @@ def upload_file():
 
             if success:
                 save_file_as(file, avail_filename)
-                return redirect('/list_files', code=302)  # TODO: Perhaps should be changed.
+                return successful_request()  # TODO: Perhaps should be changed.
             else:
-                return redirect('/', code=504)  # Should never happen, probably.
+                return internal_server_error_response()  # Should never happen, probably.
 
         else:  # Unacceptable filename.
-            return redirect('/', code=400)
+            return bad_request()
 
 
 def save_file_as(file, filename):
@@ -102,9 +114,9 @@ def get_file(filename_unchecked):
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return send_from_directory(UPLOAD_FOLDER, latest_filename)
         else:
-            return redirect('/', code=400)
+            return bad_request()
     else:
-        return redirect('/', code=400)
+        return bad_request()
 
 
 # TODO: (maybe) move, (maybe) archive
@@ -119,7 +131,7 @@ def rename_file_request():
 
         if new_filename_unchecked is None \
                 or old_filename_unchecked is None:  # Should have args in request.
-            return redirect('/', code=400)
+            return bad_request()
 
         sec_new_filename = secure_filename(new_filename_unchecked)
         sec_old_filename = secure_filename(old_filename_unchecked)  # get new secure filenames.
@@ -131,15 +143,15 @@ def rename_file_request():
                 or not acceptable_filename(sec_new_filename) \
                 or not acceptable_filename(sec_old_filename) \
                 or not os.path.isfile(os.path.join(UPLOAD_FOLDER, latest_filename)):
-            return redirect('/', code=400)  # Something with the name is bad, or the file doesn't exist.
+            return bad_request()  # Something with the name is bad, or the file doesn't exist.
         # valid names and file exists.
         success = rename_file(latest_filename, sec_new_filename)
         if success:
-            return redirect('/', code=200)
+            return successful_request()
         else:
-            return redirect('/', code=502)
+            return internal_server_error_response()
     else:
-        return redirect('/', code=400)  # Bad request.
+        return bad_request()
 
 
 def rename_file(latest_filename, sec_new_filename):
@@ -153,21 +165,21 @@ def rename_file(latest_filename, sec_new_filename):
 
 
 @app.errorhandler(413)
-def request_entity_too_large(error):
+def request_entity_too_large_logging(error):
     write_to_error_log(error)
-    return redirect('/', 413)
+    return bad_request()
 
 
 @app.errorhandler(404)
-def not_found(error):
+def not_found_logging(error):
     write_to_error_log(error)
-    redirect('/', code=404)
+    return bad_request()
 
 
 @app.errorhandler(500)
-def internal_server_error(error):
+def internal_server_error_logging(error):
     write_to_error_log(error)
-    return redirect('/', 500)
+    return internal_server_error_response()
 
 
 # We're getting the latest filename.
@@ -244,18 +256,18 @@ def login():
     elif request.method == 'POST':
         user_id = request.args.get('user_id', None)
         if user_id is None:
-            redirect('/', code=401)
+            return bad_request()
         challenge_response = request.args.get('challenge_response', None)
         if challenge_response is None:
-            redirect('/', code=401)
+            return bad_request()
         latest_challenge = get_latest_challenge(user_id)
         if latest_challenge is None:
-            redirect('/', code=401)
+            return bad_request()
         if valid_challenge_response(user_id, latest_challenge, challenge_response):
             login_user(user_id)
-            return redirect('/', code=200)
-        return redirect('/', code=401)
-    return redirect('/', code=400)  # Should not happen; flask denies request of wrong method.
+            return successful_request()
+        return bad_request()
+    return bad_request()  # Should not happen; flask denies request of wrong method.
 
 
 def issue_challenge(user_id):
