@@ -71,8 +71,7 @@ def upload_file():
 
 
 def save_file_as(file, filename):
-    write_to_error_log('File is instance of ' + str(type(file)))
-    file.save(os.path.join(UPLOAD_FOLDER, filename))  # TODO: Test this (somehow)
+    file.save(os.path.join(UPLOAD_FOLDER, filename))
 
 
 def get_available_name(sec_filename):
