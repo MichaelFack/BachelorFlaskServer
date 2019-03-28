@@ -48,7 +48,7 @@ def get_icon():
 @app.route('/list_files', methods=['GET'])
 def get_list_files_response():
     if request.method == 'GET':
-        return jsonify(get_filenames_from_serversidenames_stored())
+        return jsonify({'file_list': get_filenames_from_serversidenames_stored()})
 
 
 def get_filenames_from_serversidenames_stored():
