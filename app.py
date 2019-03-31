@@ -1,8 +1,8 @@
+import json
 import os
 
-from flask import Flask, request, redirect, send_from_directory, jsonify, Response
+from flask import Flask, request, send_from_directory, jsonify, Response
 from flask_login import LoginManager, login_user
-from werkzeug.utils import secure_filename
 
 import filehandling
 import userhandling
@@ -11,9 +11,11 @@ curr_path = os.getcwd()
 UPLOAD_FOLDER = os.path.join(curr_path, 'UPLOADS')
 RESOURCE_FOLDER = os.path.join(curr_path, 'resources')
 ADMIN_FOLDER = os.path.join(curr_path, 'ADMIN')
-ERROR_LOG = os.path.join(curr_path, 'ADMIN', 'ERROR_LOG_CIO.txt')  # TODO: Might leak info?
-USER_CATALOG = os.path.join(curr_path, 'ADMIN', 'USERS.txt')  # TODO: Consider encrypting this somehow?
+ERROR_LOG = os.path.join(curr_path, 'ADMIN', 'ERROR_LOG_CIO.txt')
+USER_CATALOG = os.path.join(curr_path, 'ADMIN', 'USERS.txt')  # TODO: Move to user handling?
 USER_RECENT_CHALLENGES = os.path.join(curr_path, 'ADMIN', 'CHALLENGES.txt')
+LIVE_FILES_LOG = os.path.join(ADMIN_FOLDER, 'LIVE_FILES.txt')  # dict[name->bool(isLive)]
+ADDITIONAL_DATA_LOG = os.path.join(ADMIN_FOLDER, 'ADD_DATA_LOG.txt')  # dict[avail_name->(filename, timestamp)]
 ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
 LOGIN_CHALLENGE_LENGTH = 32
 
@@ -45,88 +47,108 @@ def get_icon():
 
 
 @app.route('/list_files', methods=['GET'])
-def get_list_files_response():
-    if request.method == 'GET':
-        return jsonify({'file_list': filehandling.get_filenames_from_serversidenames_stored()})
+def list_files():
+    if request.method != 'GET':
+        return bad_request()
+    return jsonify({'file_list': filehandling.list_live_files()})
 
 
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
-    if request.method == 'POST':
-
-        if len(request.files) == 0:  # No file
-            return redirect('/', code=400)
-
-        file = request.files['file']
-        filename_unchecked = file.filename
-        sec_filename = secure_filename(filename_unchecked)
-
-        if filehandling.acceptable_filename(filename_unchecked) and filehandling.acceptable_filename(sec_filename):
-            # Make sure path is available (should be, but check for safety)
-            avail_filename, success = filehandling.get_available_name(sec_filename)
-
-            if success:
-                filehandling.save_file_as(file, avail_filename)
-                return successful_request()  # TODO: Perhaps should be changed.
-            else:
-                return internal_server_error_response()  # Should never happen, probably.
-
-        else:  # Unacceptable filename.
-            return bad_request()
-
-
-@app.route('/get_file/<string:filename_unchecked>', methods=['GET'])
-def get_file(filename_unchecked):
-
-    sec_filename = secure_filename(filename_unchecked)
-
-    if request.method == 'GET' and filehandling.acceptable_filename(filename_unchecked)\
-            and filehandling.acceptable_filename(sec_filename):
-
-        latest_filename = filehandling.latest_filename_version(sec_filename)
-        file_path = os.path.join(UPLOAD_FOLDER, latest_filename)
-
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return send_from_directory(UPLOAD_FOLDER, latest_filename)
-        else:
-            return file_not_found_response()
-    else:
+    # Is it the right method?
+    if request.method != 'POST':
         return bad_request()
+    # Does it contain files?
+    if len(request.files) == 0:  # No file
+        return bad_request()
+    # Does it contain the 'file'?
+    if 'file' not in request.files.keys():
+        return bad_request()
+    file = request.files['file']
+    # Does it contain additional data?
+    additional_data = request.data
+    if additional_data is None or '':
+        return bad_request()
+    additional_data = json.loads(additional_data)
+    filename = file.filename
+    # Does the additional data match?
+    additional_data_matches = filehandling.matching_additional_data(filename, additional_data)
+    # Is the filename secure?
+    is_acceptable_filename = filehandling.acceptable_filename(filename)
+    if not additional_data_matches or not is_acceptable_filename:
+        return bad_request()
+    # If all this is, then we can start working; first we find an available name for local storage:
+    avail_filename, success = filehandling.get_available_name(filename)  # TODO: fix this method
+    # If we could not log the error and return.
+    if not success:
+        return internal_server_error_logging('Could not find available name for file:' + filename)
+    # Save the file and the additional data under the filename.
+    filehandling.mark_file_as_live(filename)
+    filehandling.save_file_and_additional_data(file, avail_filename, additional_data)  # TODO: fix this method
+    return successful_request()  # TODO: Consider returning a receipt such that client can prove a file was stored.
 
 
-# TODO: (maybe) move, (maybe) archive
+@app.route('/get_file/<string:filename>', methods=['GET'])
+def get_file(filename):
+    # Is the filename requested legit?
+    is_filename_acceptable = filehandling.acceptable_filename(filename)
+    if request.method != 'GET' or not is_filename_acceptable:
+        return bad_request()
+    # what is the latest version's name of this file?
+    latest_filename = filehandling.latest_filename_version(filename)  # TODO: Refactor this method
+    if latest_filename is None:
+        return file_not_found_response()
+    # return the file and its associated additional data. If this doesn't match our client will be sad :(
+    return filehandling.load_file_and_additional_data(latest_filename)  # TODO: fix this method
 
 
+@app.route('/get_file/<string:filename>', methods=['GET'])
+def get_file_timestamp(filename):
+    # Is the filename requested legit?
+    is_filename_acceptable = filehandling.acceptable_filename(filename)
+    if request.method != 'GET' or not is_filename_acceptable:
+        return bad_request()
+    # what is the latest version's name of this file?
+    latest_filename = filehandling.latest_filename_version(filename)  # TODO: Refactor this method
+    if latest_filename is None:
+        return file_not_found_response()
+    # Get the timestamp of it and return it.
+    return filehandling.load_latest_timestamp(latest_filename)  # TODO: fix this method
+
+
+# TODO: Remove this method after verifying with Da Sawsasche
 @app.route('/rename_file', methods=['POST'])
 def rename_file_request():
-    if request.method == 'POST':
-
-        new_filename_unchecked = request.args.get("old_name", None)
-        old_filename_unchecked = request.args.get("new_name", None)
-
-        if new_filename_unchecked is None \
-                or old_filename_unchecked is None:  # Should have args in request.
-            return bad_request()
-
-        sec_new_filename = secure_filename(new_filename_unchecked)
-        sec_old_filename = secure_filename(old_filename_unchecked)  # get new secure filenames.
-
-        latest_filename = filehandling.latest_filename_version(sec_old_filename)  # what's the real name of the file?
-
-        if not filehandling.acceptable_filename(new_filename_unchecked) \
-                or not filehandling.acceptable_filename(old_filename_unchecked) \
-                or not filehandling.acceptable_filename(sec_new_filename) \
-                or not filehandling.acceptable_filename(sec_old_filename) \
-                or not os.path.isfile(os.path.join(UPLOAD_FOLDER, latest_filename)):
-            return bad_request()  # Something with the name is bad, or the file doesn't exist.
-        # valid names and file exists.
-        success = filehandling.rename_file(latest_filename, sec_new_filename)
-        if success:
-            return successful_request()
-        else:
-            return internal_server_error_response()
-    else:
+    return bad_request()
+    # How the hell is the server supposed to be able to rename a file when the client has the name encrypted??
+'''
+    # Is the request right kind?
+    if request.method != 'POST':
         return bad_request()
+    # Does it have the right arguements?
+    new_filename = request.args.get("old_name", None)
+    old_filename = request.args.get("new_name", None)
+    is_new_name_acceptable = filehandling.acceptable_filename(new_filename)
+    is_old_name_acceptable = filehandling.acceptable_filename(old_filename)
+
+    if new_filename is None or old_filename is None:  # Should have args in request.
+        return bad_request()
+
+    latest_filename = filehandling.latest_filename_version(old_filename)  # what's the real name of the file?
+
+    if not filehandling.acceptable_filename(new_filename_unchecked) \
+            or not filehandling.acceptable_filename(old_filename_unchecked) \
+            or not filehandling.acceptable_filename(sec_new_filename) \
+            or not filehandling.acceptable_filename(sec_old_filename) \
+            or not os.path.isfile(os.path.join(UPLOAD_FOLDER, latest_filename)):
+        return bad_request()  # Something with the name is bad, or the file doesn't exist.
+    # valid names and file exists.
+    success = filehandling.rename_file(latest_filename, sec_new_filename)
+    if success:
+        return successful_request()
+    else:
+        return internal_server_error_response()
+'''
 
 
 @app.errorhandler(413)
@@ -147,20 +169,23 @@ def internal_server_error_logging(error):
     return internal_server_error_response()
 
 
-def write_to_error_log(s):
+def write_to_error_log(s):  # We're imperfect beings and our code may reflect this. Log your errors.
     if type(s) is not str:
         s = str(s)
     with open(ERROR_LOG, 'a') as error_log_file:
         error_log_file.write('\n' + s)  # Write to the error log
 
 
-@app.route('/login', methods=['GET', 'POST'])  # Step 1 in login in; being issued a challenge.
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'GET':
+    if request.method == 'GET':  # To login you first get a challenge.
+        # Regardless of whether a user exists or not we should issue a challenge;
+        # can't let people know who is users and who aren't.
+        # If we return a challenge only when you've input a valid user_id adversaries may guess user_ids
         user_id = request.args.get('user_id', None)
-        challenge = userhandling.issue_challenge(user_id)
-        return challenge
-    elif request.method == 'POST':
+        return userhandling.issue_challenge(user_id)  # TODO: Ensure always issues challenges, even when user_id is invalid.
+    elif request.method == 'POST':  # Then you respond to that challenge.
+        # When one responds to a challenge always return bad request lest the request is well formed and validate.
         user_id = request.args.get('user_id', None)
         if user_id is None:
             return bad_request()
@@ -175,6 +200,32 @@ def login():
             return successful_request()
         return bad_request()
     return bad_request()  # Should not happen; flask denies request of wrong method.
+
+
+@app.route('/archive_file/<string:filename>', methods=['POST'])
+def archive_file(filename):
+    if request.method != 'POST':
+        return bad_request()
+    if not filehandling.acceptable_filename(filename):
+        return bad_request()
+    success = filehandling.archive(filename)  # TODO: Implement this
+    if success:
+        return successful_request()
+    else:
+        return file_not_found_response()
+
+
+@app.route('/resurrect_file/<string:filename>', methods=['POST'])
+def resurrect_file(filename):
+    if request.method != 'POST':
+        return bad_request()
+    if not filehandling.acceptable_filename(filename):
+        return bad_request()
+    success = filehandling.resurrect(filename)  # TODO: Implement this
+    if success:
+        return successful_request()
+    else:
+        return file_not_found_response()
 
 
 if __name__ == '__main__':
