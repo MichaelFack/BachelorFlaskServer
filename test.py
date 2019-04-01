@@ -124,6 +124,7 @@ class TestFileNaming(unittest.TestCase):
         filehandling.store_additional_data(avail_filename, {'t': timestamp, 'n': test_file_name})
         filehandling.mark_file_as_live(test_file_name)
 
+    '''
     def depricated_test_can_rename_files(self):  # TODO: Remove this test
         self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         pre_rename_name = 'testbefore_123.123.cio'
@@ -136,6 +137,7 @@ class TestFileNaming(unittest.TestCase):
         filenames_in_dir = os.listdir('TEST_FOLDER')
         self.assertTrue(len(filenames_in_dir) == 1)
         self.assertTrue(filehandling.server_side_name_to_filename(filenames_in_dir[0]) == post_rename_name)
+    '''
 
     def test_only_live_files_are_listed_as_such(self):
         self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
@@ -191,7 +193,7 @@ class TestLoginProcedure(unittest.TestCase):
             os.remove(app.USER_CATALOG)
 
     def tearDown(self):
-        self.clean_admin_test_folder()
+        clean_admin_test_folder()
 
     def test_can_create_user(self):
         self.assertTrue(len(userhandling.get_users()) == 0)  # There should be none.

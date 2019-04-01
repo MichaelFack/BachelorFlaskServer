@@ -3,7 +3,7 @@ import os
 import secrets
 import time
 from threading import Lock
-from hashlib import sha3_512
+from hashlib import sha512
 
 import app
 
@@ -79,7 +79,7 @@ def get_user_salt(user_id):  # TODO: Might need another impl.
 
 
 def compute_challenge_response(latest_challenge, user_id):
-    hash_func = sha3_512()
+    hash_func = sha512()
     salt = get_user_salt(user_id)
     if salt is None: return None
     hash_func.update(bytearray.fromhex(salt))

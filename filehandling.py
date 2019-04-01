@@ -81,20 +81,32 @@ def save_file_and_additional_data(file, avail_filename, additional_data):  # TOD
     store_additional_data(avail_filename, additional_data)
 
 
-def store_additional_data(filename, additional_data):
+def store_additional_data(server_side_name, additional_data):
     ADDITIONAL_DATA_LOG_LOCK.acquire()
     if not os.path.isfile(app.ADDITIONAL_DATA_LOG):
         # If the file doesn't already exist, just dump a simple map into it.
         with open(app.ADDITIONAL_DATA_LOG, 'w') as add_log:
-            json.dump({filename: additional_data}, add_log)
+            json.dump({server_side_name: additional_data}, add_log)
         ADDITIONAL_DATA_LOG_LOCK.release()
         return
     with open(app.ADDITIONAL_DATA_LOG, 'r') as add_log:
         data = json.load(add_log)
-    data[filename] = additional_data
+    data[server_side_name] = additional_data
     with open(app.ADDITIONAL_DATA_LOG, 'w') as add_log:
         json.dump(data, add_log)
     ADDITIONAL_DATA_LOG_LOCK.release()
+
+
+def load_file_content_and_additional_data(server_side_name):
+    filepath = os.path.join(app.UPLOAD_FOLDER, server_side_name)
+    if not os.path.isfile(filepath):
+        return None, None
+    with open(filepath, 'r') as file:
+        file_content = file.read()
+    additional_data = load_additional_data(server_side_name)
+    if additional_data is None:
+        return None, None
+    return file_content, additional_data
 
 
 def load_additional_data(filename):

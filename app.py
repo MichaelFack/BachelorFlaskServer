@@ -1,7 +1,7 @@
 import json
 import os
 
-from flask import Flask, request, send_from_directory, jsonify, Response
+from flask import Flask, request, send_from_directory, jsonify, Response, make_response
 from flask_login import LoginManager, login_user
 
 import filehandling
@@ -95,11 +95,17 @@ def get_file(filename):
     if request.method != 'GET' or not is_filename_acceptable:
         return bad_request()
     # what is the latest version's name of this file?
-    latest_filename = filehandling.latest_filename_version(filename)  # TODO: Refactor this method
+    latest_filename = filehandling.latest_filename_version(filename)
     if latest_filename is None:
         return file_not_found_response()
     # return the file and its associated additional data. If this doesn't match our client will be sad :(
-    return filehandling.load_file_and_additional_data(latest_filename)  # TODO: fix this method
+    file_content, additional_data = filehandling.load_file_content_and_additional_data(latest_filename)  # TODO: fix this method
+    if file_content is None or additional_data is None:
+        return file_not_found_response()
+    response = make_response()
+    response.content = file_content
+    response.data = additional_data
+    return response
 
 
 @app.route('/get_file/<string:filename>', methods=['GET'])
@@ -109,7 +115,7 @@ def get_file_timestamp(filename):
     if request.method != 'GET' or not is_filename_acceptable:
         return bad_request()
     # what is the latest version's name of this file?
-    latest_filename = filehandling.latest_filename_version(filename)  # TODO: Refactor this method
+    latest_filename = filehandling.latest_filename_version(filename)
     if latest_filename is None:
         return file_not_found_response()
     # Get the timestamp of it and return it.
