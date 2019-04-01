@@ -101,7 +101,7 @@ def load_file_content_and_additional_data(server_side_name):
     filepath = os.path.join(app.UPLOAD_FOLDER, server_side_name)
     if not os.path.isfile(filepath):
         return None, None
-    with open(filepath, 'r') as file:
+    with open(filepath, 'rb') as file:
         file_content = file.read()
     additional_data = load_additional_data(server_side_name)
     if additional_data is None:

@@ -66,10 +66,10 @@ def upload_file():
         return bad_request()
     file = request.files['file']
     # Does it contain additional data?
-    additional_data = request.data
-    if additional_data is None or '':
+    try:
+        additional_data = json.load(request.files['additional_data'])
+    except TypeError:
         return bad_request()
-    additional_data = json.loads(additional_data)
     filename = file.filename
     # Does the additional data match?
     additional_data_matches = filehandling.matching_additional_data(filename, additional_data)
@@ -78,9 +78,9 @@ def upload_file():
     if not additional_data_matches or not is_acceptable_filename:
         return bad_request()
     # If all this is, then we can start working; first we find an available name for local storage:
-    avail_filename, success = filehandling.get_available_name(filename)  # TODO: fix this method
+    avail_filename = filehandling.get_available_name(filename, additional_data['t'])  # TODO: fix this method
     # If we could not log the error and return.
-    if not success:
+    if avail_filename is None:
         return internal_server_error_logging('Could not find available name for file:' + filename)
     # Save the file and the additional data under the filename.
     filehandling.mark_file_as_live(filename)
@@ -102,10 +102,7 @@ def get_file(filename):
     file_content, additional_data = filehandling.load_file_content_and_additional_data(latest_filename)  # TODO: fix this method
     if file_content is None or additional_data is None:
         return file_not_found_response()
-    response = make_response()
-    response.content = file_content
-    response.data = additional_data
-    return response
+    return file_content, additional_data
 
 
 @app.route('/get_file/<string:filename>', methods=['GET'])
