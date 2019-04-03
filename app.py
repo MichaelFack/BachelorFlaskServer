@@ -71,9 +71,8 @@ def upload_file():
     if 'additional_data' not in request.files.keys():
         print("additional_data not included")
         return bad_request()
-    additional_data = json.loads(request.files['additional_data'].read())
+    additional_data = json.loads(request.files['additional_data'].read().decode('utf-8'))
     filename = file.filename
-    print("filename = ", filename)
     # Does the additional data match?
     additional_data_matches = filehandling.matching_additional_data(filename, additional_data)
     # Is the filename secure?
