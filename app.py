@@ -106,7 +106,7 @@ def get_file(filename):
     if file_path is None or additional_data is None:
         return file_not_found_response()
     with open(file_path, 'rb') as file:
-        file_content = file.read()
+        file_content = file.read().hex()
     return json.dumps({'file': file_content, 'additional_data': additional_data})
 
 
