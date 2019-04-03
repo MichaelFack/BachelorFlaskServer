@@ -97,16 +97,14 @@ def store_additional_data(server_side_name, additional_data):
     ADDITIONAL_DATA_LOG_LOCK.release()
 
 
-def load_file_content_and_additional_data(server_side_name):
+def load_file_path_and_additional_data(server_side_name):
     filepath = os.path.join(app.UPLOAD_FOLDER, server_side_name)
     if not os.path.isfile(filepath):
         return None, None
-    with open(filepath, 'rb') as file:
-        file_content = file.read()
     additional_data = load_additional_data(server_side_name)
     if additional_data is None:
         return None, None
-    return file_content, additional_data
+    return filepath, additional_data
 
 
 def load_additional_data(filename):

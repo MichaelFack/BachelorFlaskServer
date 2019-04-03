@@ -1,7 +1,7 @@
 import json
 import os
 
-from flask import Flask, request, send_from_directory, jsonify, Response, make_response
+from flask import Flask, request, send_from_directory, jsonify, Response, make_response, send_file
 from flask_login import LoginManager, login_user
 
 import filehandling
@@ -60,22 +60,26 @@ def upload_file():
         return bad_request()
     # Does it contain files?
     if len(request.files) == 0:  # No file
+        print("No files")
         return bad_request()
     # Does it contain the 'file'?
-    if 'file' not in request.files.keys():
+    if 'file_content' not in request.files.keys():
+        print("File not included")
         return bad_request()
-    file = request.files['file']
+    file = request.files['file_content']
     # Does it contain additional data?
-    try:
-        additional_data = json.load(request.files['additional_data'])
-    except TypeError:
+    if 'additional_data' not in request.files.keys():
+        print("additional_data not included")
         return bad_request()
+    additional_data = json.loads(request.files['additional_data'].read())
     filename = file.filename
+    print("filename = ", filename)
     # Does the additional data match?
     additional_data_matches = filehandling.matching_additional_data(filename, additional_data)
     # Is the filename secure?
     is_acceptable_filename = filehandling.acceptable_filename(filename)
     if not additional_data_matches or not is_acceptable_filename:
+        print("additional_data_matches=", additional_data_matches, "acceptable_name=", is_acceptable_filename)
         return bad_request()
     # If all this is, then we can start working; first we find an available name for local storage:
     avail_filename = filehandling.get_available_name(filename, additional_data['t'])  # TODO: fix this method
@@ -99,10 +103,12 @@ def get_file(filename):
     if latest_filename is None:
         return file_not_found_response()
     # return the file and its associated additional data. If this doesn't match our client will be sad :(
-    file_content, additional_data = filehandling.load_file_content_and_additional_data(latest_filename)  # TODO: fix this method
-    if file_content is None or additional_data is None:
+    file_path, additional_data = filehandling.load_file_path_and_additional_data(latest_filename)  # TODO: fix this method
+    if file_path is None or additional_data is None:
         return file_not_found_response()
-    return file_content, additional_data
+    with open(file_path, 'rb') as file:
+        file_content = file.read().hex()
+    return json.dumps({'file': file_content, 'additional_data': additional_data})
 
 
 @app.route('/get_file/<string:filename>', methods=['GET'])
