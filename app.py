@@ -80,13 +80,13 @@ def upload_file():
     if not additional_data_matches or not is_acceptable_filename:
         return bad_request()
     # If all this is, then we can start working; first we find an available name for local storage:
-    avail_filename = filehandling.get_available_name(filename, additional_data['t'])  # TODO: fix this method
+    avail_filename = filehandling.get_available_name(filename, additional_data['t'])
     # If we could not log the error and return.
     if avail_filename is None:
         return internal_server_error_logging('Could not find available name for file:' + filename)
     # Save the file and the additional data under the filename.
     filehandling.mark_file_as_live(filename)
-    filehandling.save_file_and_additional_data(file, avail_filename, additional_data)  # TODO: fix this method
+    filehandling.save_file_and_additional_data(file, avail_filename, additional_data)
     return successful_request()  # TODO: Consider returning a receipt such that client can prove a file was stored.
 
 
@@ -153,7 +153,7 @@ def login():
         # can't let people know who is users and who aren't.
         # If we return a challenge only when you've input a valid user_id adversaries may guess user_ids
         user_id = request.args.get('user_id', None)
-        return userhandling.issue_challenge(user_id)  # TODO: Ensure always issues challenges, even when user_id is invalid.
+        return userhandling.issue_challenge(user_id)
     elif request.method == 'POST':  # Then you respond to that challenge.
         # When one responds to a challenge always return bad request lest the request is well formed and validate.
         user_id = request.args.get('user_id', None)
@@ -178,7 +178,7 @@ def archive_file(filename):
         return bad_request()
     if not filehandling.acceptable_filename(filename):
         return bad_request()
-    success = filehandling.archive(filename)  # TODO: Implement this
+    success = filehandling.archive_file(filename)
     if success:
         return successful_request()
     else:
@@ -191,7 +191,7 @@ def resurrect_file(filename):
         return bad_request()
     if not filehandling.acceptable_filename(filename):
         return bad_request()
-    success = filehandling.resurrect(filename)  # TODO: Implement this
+    success = filehandling.resurrect_file(filename)
     if success:
         return successful_request()
     else:
