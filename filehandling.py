@@ -53,11 +53,11 @@ def set_file_liveness(filename, set_to):
 
 
 def archive_file(filename):
-    set_file_liveness(filename, False)
+    return set_file_liveness(filename, False)
 
 
 def resurrect_file(filename):
-    set_file_liveness(filename, True)
+    return set_file_liveness(filename, True)
 
 
 def mark_file_as_live(filename):
