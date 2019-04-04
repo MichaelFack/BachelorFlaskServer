@@ -124,20 +124,6 @@ class TestFileNaming(unittest.TestCase):
         filehandling.store_additional_data(avail_filename, {'t': timestamp, 'n': test_file_name})
         filehandling.mark_file_as_live(test_file_name)
 
-    '''
-    def depricated_test_can_rename_files(self):  # TODO: Remove this test
-        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
-        pre_rename_name = 'testbefore_123.123.cio'
-        post_rename_name = '123.cio'  # has to be safe
-        self.create_test_file(pre_rename_name)
-        filenames_in_dir = os.listdir('TEST_FOLDER')
-        self.assertTrue(len(filenames_in_dir) == 1)
-        self.assertTrue(pre_rename_name in filenames_in_dir)
-        filehandling.rename_file(pre_rename_name, post_rename_name)
-        filenames_in_dir = os.listdir('TEST_FOLDER')
-        self.assertTrue(len(filenames_in_dir) == 1)
-        self.assertTrue(filehandling.server_side_name_to_filename(filenames_in_dir[0]) == post_rename_name)
-    '''
 
     def test_only_live_files_are_listed_as_such(self):
         self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
@@ -180,6 +166,11 @@ class TestFileNaming(unittest.TestCase):
         self.assertTrue(len(live_files_with_some_resurrected) == 3)
         for name in live_files:
             self.assertTrue(name in live_files_with_some_resurrected)
+
+    def test_latest_timestamp_is_the_latest_timestamp(self):
+        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
+        self.create_test_file('ABC.cio', 1234.5678)
+        self.assertTrue(1234.5678 == filehandling.load_latest_timestamp('ABC.cio'), "Time logged was not correct.")
 
 
 class TestLoginProcedure(unittest.TestCase):

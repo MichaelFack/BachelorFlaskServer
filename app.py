@@ -116,47 +116,10 @@ def get_file_timestamp(filename):
     is_filename_acceptable = filehandling.acceptable_filename(filename)
     if request.method != 'GET' or not is_filename_acceptable:
         return bad_request()
-    # what is the latest version's name of this file?
-    latest_filename = filehandling.latest_filename_version(filename)
-    if latest_filename is None:
+    timestamp = filehandling.load_latest_timestamp(filename)
+    if timestamp is None:
         return file_not_found_response()
-    # Get the timestamp of it and return it.
-    return filehandling.load_latest_timestamp(latest_filename)  # TODO: fix this method
-
-
-# TODO: Remove this method after verifying with Da Sawsasche
-@app.route('/rename_file', methods=['POST'])
-def rename_file_request():
-    return bad_request()
-    # How the hell is the server supposed to be able to rename a file when the client has the name encrypted??
-'''
-    # Is the request right kind?
-    if request.method != 'POST':
-        return bad_request()
-    # Does it have the right arguements?
-    new_filename = request.args.get("old_name", None)
-    old_filename = request.args.get("new_name", None)
-    is_new_name_acceptable = filehandling.acceptable_filename(new_filename)
-    is_old_name_acceptable = filehandling.acceptable_filename(old_filename)
-
-    if new_filename is None or old_filename is None:  # Should have args in request.
-        return bad_request()
-
-    latest_filename = filehandling.latest_filename_version(old_filename)  # what's the real name of the file?
-
-    if not filehandling.acceptable_filename(new_filename_unchecked) \
-            or not filehandling.acceptable_filename(old_filename_unchecked) \
-            or not filehandling.acceptable_filename(sec_new_filename) \
-            or not filehandling.acceptable_filename(sec_old_filename) \
-            or not os.path.isfile(os.path.join(UPLOAD_FOLDER, latest_filename)):
-        return bad_request()  # Something with the name is bad, or the file doesn't exist.
-    # valid names and file exists.
-    success = filehandling.rename_file(latest_filename, sec_new_filename)
-    if success:
-        return successful_request()
-    else:
-        return internal_server_error_response()
-'''
+    return timestamp
 
 
 @app.errorhandler(413)

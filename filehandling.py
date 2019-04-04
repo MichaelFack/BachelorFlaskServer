@@ -122,6 +122,14 @@ def load_additional_data(filename):
     return data[filename]
 
 
+def load_latest_timestamp(filename):
+    latest_filename = latest_filename_version(filename)
+    additional_data_of_file = load_additional_data(latest_filename)  # A bit redundant.
+    if additional_data_of_file is None:
+        return None
+    return additional_data_of_file['t']
+
+
 def get_available_name(filename, timestamp):
     for i in range(100):
         avail_filename = filename_to_server_side_name(filename, timestamp, i)
@@ -175,21 +183,3 @@ def latest_filename_version(filename):
                 curr_latest_filename = filename_in_list
                 curr_timestamp = file_timestamp
     return curr_latest_filename
-
-
-''' The vault of depricated methods:
-
-def get_filenames_from_serversidenames_stored():
-    files = os.listdir(app.UPLOAD_FOLDER)
-    accurate_names = set(map(server_side_name_to_filename, files))  # TODO: Check if correct
-    return list(accurate_names)
-
-def rename_file(latest_filename, sec_new_filename):
-    avail_name, success = get_available_name(sec_new_filename)
-    if success:
-        os.rename(os.path.join(app.UPLOAD_FOLDER, latest_filename), os.path.join(app.UPLOAD_FOLDER, avail_name))
-    else:
-        app.write_to_error_log('Could not determine available name for file "'
-                           + latest_filename + '" as "' + sec_new_filename + '".')
-    return success
-'''
