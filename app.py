@@ -78,7 +78,6 @@ def upload_file():
     # Is the filename secure?
     is_acceptable_filename = filehandling.acceptable_filename(filename)
     if not additional_data_matches or not is_acceptable_filename:
-        print("additional_data_matches=", additional_data_matches, "acceptable_name=", is_acceptable_filename)
         return bad_request()
     # If all this is, then we can start working; first we find an available name for local storage:
     avail_filename = filehandling.get_available_name(filename, additional_data['t'])  # TODO: fix this method

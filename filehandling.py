@@ -143,7 +143,11 @@ def get_available_name(filename, timestamp):
 def matching_additional_data(filename, additional_data):
     # For the additional data to match the name has to match
     # and the time cannot be in the future or older than 60 secs.
-    return additional_data['n'] == filename and 60 > time.time() - additional_data['t'] > 0
+    if additional_data['n'] == filename:
+        return True
+    else:
+        app.write_to_error_log("Names doens't match: " + filename + "!=" + additional_data['n'])
+        return False
 
 
 def acceptable_filename(filename):
