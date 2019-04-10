@@ -72,6 +72,9 @@ def upload_file():
         print("additional_data not included")
         return bad_request()
     additional_data = json.loads(request.files['additional_data'].read().decode('utf-8'))
+    if list(additional_data.keys()) != ['n', 't', 'nonce1', 'nonce2']:
+        print("Additional data doesn't contain expected fields.")
+        return bad_request()
     filename = file.filename
     # Does the additional data match?
     additional_data_matches = filehandling.matching_additional_data(filename, additional_data)
@@ -109,7 +112,7 @@ def get_file(filename):
     return json.dumps({'file': file_content, 'additional_data': additional_data})
 
 
-@app.route('/get_file/<string:filename>', methods=['GET'])
+@app.route('/get_file_time/<string:filename>', methods=['GET'])
 def get_file_timestamp(filename):
     # Is the filename requested legit?
     is_filename_acceptable = filehandling.acceptable_filename(filename)

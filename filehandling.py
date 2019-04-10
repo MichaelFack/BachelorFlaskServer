@@ -24,7 +24,7 @@ def list_live_files():  # In Admin there exists a file dict
     # Obtain the set of names 'live'.
     live_files = []
     for name, isLive in data.items():
-        if isLive: live_files.append(name)
+        if isLive: live_files.append([name, load_additional_data(latest_filename_version(name))['nonce1']])
     return live_files
 
 

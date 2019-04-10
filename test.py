@@ -4,6 +4,8 @@ import secrets
 import string
 import unittest
 
+import numpy as np
+
 import app
 import filehandling
 import userhandling
@@ -79,7 +81,7 @@ class TestFileNaming(unittest.TestCase):
         # get the actual names of the files.
         filenames_in_dir = os.listdir(test_folder)
         self.assertTrue(len(filenames_in_dir) == 50, str(len(filenames_in_dir)) + " of 50 files created.")
-        files_listed_uniquely = filehandling.list_live_files()
+        files_listed_uniquely = list(np.array(filehandling.list_live_files())[:, 0])
         self.check_server_side_names_are_listed_uniquely(files_listed_uniquely, filenames_in_dir)
 
     def check_server_side_names_are_listed_uniquely(self, files_listed_uniquely, filenames_in_dir):
@@ -108,9 +110,9 @@ class TestFileNaming(unittest.TestCase):
         self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         for i in range(100):
             self.create_test_file("ABC"+str(i)+".cio", 1.0)
-        files_listed_uniquely = filehandling.list_live_files()
+        files_listed_uniquely = list(np.array(filehandling.list_live_files())[:, 0])
         self.create_test_file('A.cio', 1.0)
-        files_listed_uniquely_with_new_file = filehandling.list_live_files()
+        files_listed_uniquely_with_new_file = list(np.array(filehandling.list_live_files())[:, 0])
         self.assertFalse(files_listed_uniquely == files_listed_uniquely_with_new_file,
                          'Expected new file to have been added.')
         for name in files_listed_uniquely_with_new_file:
@@ -121,7 +123,7 @@ class TestFileNaming(unittest.TestCase):
         avail_filename = filehandling.get_available_name(test_file_name, timestamp)
         with open(os.path.join(test_folder, avail_filename), 'w') as file:
             file.write('This is for a test.')
-        filehandling.store_additional_data(avail_filename, {'t': timestamp, 'n': test_file_name})
+        filehandling.store_additional_data(avail_filename, {'t': timestamp, 'n': test_file_name, 'nonce1': 123, 'nonce2': 456})
         filehandling.mark_file_as_live(test_file_name)
 
 
@@ -129,12 +131,12 @@ class TestFileNaming(unittest.TestCase):
         self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         for i in range(100):
             self.create_test_file("ABC"+str(i)+".cio", 1.0)
-        files_listed_uniquely = filehandling.list_live_files()
+        files_listed_uniquely = list(np.array(filehandling.list_live_files())[:, 0])
         self.assertTrue(len(files_listed_uniquely) == 100, "Expect 100 files to have been created.")
         filehandling.archive_file("ABC69.cio")
         filehandling.archive_file("ABC33.cio")
         filehandling.archive_file("ABC42.cio")
-        files_listed_uniquely_without_a_few_files = filehandling.list_live_files()
+        files_listed_uniquely_without_a_few_files = list(np.array(filehandling.list_live_files())[:, 0])
         self.assertTrue(len(files_listed_uniquely_without_a_few_files) == 97,
                         "Expect 100 files to have been created of which 3 have been archived.")
         self.assertFalse(files_listed_uniquely == files_listed_uniquely_without_a_few_files,
@@ -154,15 +156,15 @@ class TestFileNaming(unittest.TestCase):
         self.create_test_file('ABC.cio', 1.0)
         self.create_test_file('ABC1.cio', 1.0)
         self.create_test_file('ABC2.cio', 1.0)
-        live_files = filehandling.list_live_files()
+        live_files = list(np.array(filehandling.list_live_files())[:, 0])
         self.assertTrue(len(live_files) == 3)
         filehandling.archive_file('ABC.cio')
         filehandling.archive_file('ABC1.cio')
-        live_files_with_some_archived = filehandling.list_live_files()
+        live_files_with_some_archived = list(np.array(filehandling.list_live_files())[:, 0])
         self.assertTrue(len(live_files_with_some_archived) == 1 and live_files_with_some_archived == ["ABC2.cio"])
         filehandling.resurrect_file("ABC.cio")
         filehandling.resurrect_file("ABC1.cio")
-        live_files_with_some_resurrected = filehandling.list_live_files()
+        live_files_with_some_resurrected = list(np.array(filehandling.list_live_files())[:, 0])
         self.assertTrue(len(live_files_with_some_resurrected) == 3)
         for name in live_files:
             self.assertTrue(name in live_files_with_some_resurrected)
