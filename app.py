@@ -72,9 +72,12 @@ def upload_file():
         print("additional_data not included")
         return bad_request()
     additional_data = json.loads(request.files['additional_data'].read().decode('utf-8'))
-    if list(additional_data.keys()) != ['n', 't', 'nonce1', 'nonce2']:
-        print("Additional data doesn't contain expected fields.")
-        return bad_request()
+    for field in list(additional_data.keys()):
+        if field not in ['n', 't', 'nonce1', 'nonce2']:
+            return bad_request()
+    for field in ['n', 't', 'nonce1', 'nonce2']:
+        if field not in ['n', 't', 'nonce1', 'nonce2']:
+            return bad_request()
     filename = file.filename
     # Does the additional data match?
     additional_data_matches = filehandling.matching_additional_data(filename, additional_data)
