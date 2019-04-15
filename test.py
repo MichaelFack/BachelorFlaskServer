@@ -20,8 +20,7 @@ class TestFileNaming(unittest.TestCase):
         app.ADMIN_FOLDER = test_admin_folder
         app.LIVE_FILES_LOG = os.path.join(app.ADMIN_FOLDER, 'LIVE_FILES.txt')  # dict[name->bool(isLive)]
         app.ADDITIONAL_DATA_LOG = os.path.join(app.ADMIN_FOLDER, 'ADD_DATA_LOG.txt')  # dict[avail_name->(filename, timestamp)]
-        if not os.path.exists(app.UPLOAD_FOLDER):  # Create the test folder
-            os.mkdir(app.UPLOAD_FOLDER)
+        create_test_folders()
 
     def tearDown(self):
         clean_test_folder()
@@ -175,15 +174,20 @@ class TestFileNaming(unittest.TestCase):
         self.assertTrue(1234.5678 == filehandling.load_latest_timestamp('ABC.cio'), "Time logged was not correct.")
 
 
+def create_test_folders():
+    if not os.path.exists(app.ADMIN_FOLDER):  # Create the test folder
+        os.mkdir(app.ADMIN_FOLDER)
+    if os.path.isfile(app.USER_CATALOG):
+        os.remove(app.USER_CATALOG)
+    if not os.path.exists(app.UPLOAD_FOLDER):  # Create the test folder
+        os.mkdir(app.UPLOAD_FOLDER)
+
+
 class TestLoginProcedure(unittest.TestCase):
     def setUp(self):
         app.ADMIN_FOLDER = 'TEST_ADMIN'  # Change admin folder for the test
         app.USER_CATALOG = os.path.join(app.ADMIN_FOLDER, 'USERS.txt')
         app.USER_RECENT_CHALLENGES = os.path.join(app.ADMIN_FOLDER, 'CHALLENGES.txt')
-        if not os.path.exists(app.ADMIN_FOLDER):  # Create the test folder
-            os.mkdir(app.ADMIN_FOLDER)
-        if os.path.isfile(app.USER_CATALOG):
-            os.remove(app.USER_CATALOG)
 
     def tearDown(self):
         clean_admin_test_folder()
