@@ -1,6 +1,6 @@
+import json
 import os
 import random
-import secrets
 import string
 import unittest
 
@@ -10,21 +10,25 @@ import app
 import filehandling
 import userhandling
 
-test_folder = 'TEST_FOLDER'
-test_admin_folder = 'TEST_ADMIN'
-
 
 class TestFileNaming(unittest.TestCase):
     def setUp(self):
-        app.UPLOAD_FOLDER = test_folder  # Change upload folder for the test
-        app.ADMIN_FOLDER = test_admin_folder
-        app.LIVE_FILES_LOG = os.path.join(app.ADMIN_FOLDER, 'LIVE_FILES.txt')  # dict[name->bool(isLive)]
-        app.ADDITIONAL_DATA_LOG = os.path.join(app.ADMIN_FOLDER, 'ADD_DATA_LOG.txt')  # dict[avail_name->(filename, timestamp)]
-        create_test_folders()
+        self.user = userhandling.UserMethodPack("aaaabbbbcccc")
+        self.user.register()
 
     def tearDown(self):
-        clean_test_folder()
-        clean_admin_test_folder()
+        files_to_rm = []
+        if os.path.isdir(self.user.upload_directory()):
+            files_to_rm = [os.path.join(self.user.upload_directory(), path) for path in os.listdir(self.user.upload_directory())]
+        if os.path.isdir(self.user.admin_directory()):
+            files_to_rm += [os.path.join(self.user.admin_directory(), path) for path in os.listdir(self.user.admin_directory())]
+        for path in files_to_rm:
+            os.remove(path)
+        if os.path.isdir(self.user.upload_directory()):
+            os.rmdir(self.user.upload_directory())
+        if os.path.isdir(self.user.admin_directory()):
+            os.rmdir(self.user.admin_directory())
+        self.user.unregister()
 
     def test_accepts_acceptable_names(self):
         for i in range(10000):
@@ -69,7 +73,6 @@ class TestFileNaming(unittest.TestCase):
             self.assertTrue(s == s_, s + " != " + s_+ " where ssn = " + ssn)
 
     def test_list_files_gets_list_of_unique_file(self):
-        self.assertTrue(os.path.isdir(test_folder), "expect 'TEST_FOLDER' to be a dir.")
         # Create a bunch of files with random names
         for i in range(10):
             self.create_test_file('A'+str(i)+'.cio', 1.0)
@@ -78,9 +81,9 @@ class TestFileNaming(unittest.TestCase):
             self.create_test_file('AB'+str(i)+'.cio', 5.0)
             self.create_test_file('AB'+str(i)+'.cio', 100.0)
         # get the actual names of the files.
-        filenames_in_dir = os.listdir(test_folder)
+        filenames_in_dir = os.listdir(self.user.upload_directory())
         self.assertTrue(len(filenames_in_dir) == 50, str(len(filenames_in_dir)) + " of 50 files created.")
-        files_listed_uniquely = list(np.array(filehandling.list_live_files())[:, 0])
+        files_listed_uniquely = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.check_server_side_names_are_listed_uniquely(files_listed_uniquely, filenames_in_dir)
 
     def check_server_side_names_are_listed_uniquely(self, files_listed_uniquely, filenames_in_dir):
@@ -94,24 +97,22 @@ class TestFileNaming(unittest.TestCase):
             file_names_seen.append(file_named)
 
     def test_get_latest_gets_latest(self):
-        self.assertTrue(os.path.isdir(test_folder), "expect 'TEST_FOLDER' to be a dir.")
         self.create_test_file('A.cio', 1.0)
         self.create_test_file('A.cio', 5.0)
         self.create_test_file('A.cio', 99.99)
         self.create_test_file('A.cio', 5.0)
         self.create_test_file('A.cio', 100.0)
-        self.assertTrue(filehandling.latest_filename_version('A.cio') == 'A_100.0_0.cio',
-                        "Latest should be 'A_100.0_0.cio' but is" + filehandling.latest_filename_version('A.cio'))
+        self.assertTrue(filehandling.latest_filename_version('A.cio', self.user) == 'A_100.0_0.cio',
+                        "Latest should be 'A_100.0_0.cio' but is" + filehandling.latest_filename_version('A.cio', self.user))
 
     # def test_can_save_file(self):  # TODO: Write this test.
 
     def test_new_files_are_listed_uniquely(self):
-        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         for i in range(100):
             self.create_test_file("ABC"+str(i)+".cio", 1.0)
-        files_listed_uniquely = list(np.array(filehandling.list_live_files())[:, 0])
+        files_listed_uniquely = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.create_test_file('A.cio', 1.0)
-        files_listed_uniquely_with_new_file = list(np.array(filehandling.list_live_files())[:, 0])
+        files_listed_uniquely_with_new_file = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.assertFalse(files_listed_uniquely == files_listed_uniquely_with_new_file,
                          'Expected new file to have been added.')
         for name in files_listed_uniquely_with_new_file:
@@ -119,23 +120,29 @@ class TestFileNaming(unittest.TestCase):
                             'Expect ' + name + ' in previous listing or to be the newly added.')
 
     def create_test_file(self, test_file_name, timestamp):
-        avail_filename = filehandling.get_available_name(test_file_name, timestamp)
-        with open(os.path.join(test_folder, avail_filename), 'w') as file:
+        avail_filename = filehandling.get_available_name(test_file_name, timestamp, self.user)
+        if not os.path.isdir(app.UPLOAD_FOLDER):
+            os.mkdir(app.UPLOAD_FOLDER)
+        if not os.path.isdir(self.user.upload_directory()):
+            os.mkdir(self.user.upload_directory())
+        with open(os.path.join(self.user.upload_directory(), avail_filename), 'w') as file:
             file.write('This is for a test.')
-        filehandling.store_additional_data(avail_filename, {'t': timestamp, 'n': test_file_name, 'nonce1': 123, 'nonce2': 456})
-        filehandling.mark_file_as_live(test_file_name)
+        filehandling.store_additional_data(
+            avail_filename,
+            {'t': timestamp, 'n': test_file_name, 'nonce1': 123, 'nonce2': 456},
+            self.user)
+        filehandling.mark_file_as_live(test_file_name, self.user)
 
 
     def test_only_live_files_are_listed_as_such(self):
-        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         for i in range(100):
             self.create_test_file("ABC"+str(i)+".cio", 1.0)
-        files_listed_uniquely = list(np.array(filehandling.list_live_files())[:, 0])
+        files_listed_uniquely = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.assertTrue(len(files_listed_uniquely) == 100, "Expect 100 files to have been created.")
-        filehandling.archive_file("ABC69.cio")
-        filehandling.archive_file("ABC33.cio")
-        filehandling.archive_file("ABC42.cio")
-        files_listed_uniquely_without_a_few_files = list(np.array(filehandling.list_live_files())[:, 0])
+        filehandling.archive_file("ABC69.cio", self.user)
+        filehandling.archive_file("ABC33.cio", self.user)
+        filehandling.archive_file("ABC42.cio", self.user)
+        files_listed_uniquely_without_a_few_files = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.assertTrue(len(files_listed_uniquely_without_a_few_files) == 97,
                         "Expect 100 files to have been created of which 3 have been archived.")
         self.assertFalse(files_listed_uniquely == files_listed_uniquely_without_a_few_files,
@@ -151,27 +158,53 @@ class TestFileNaming(unittest.TestCase):
                 self.assertTrue(name in files_listed_uniquely_without_a_few_files)
 
     def test_archived_files_can_be_resurrected(self):
-        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         self.create_test_file('ABC.cio', 1.0)
         self.create_test_file('ABC1.cio', 1.0)
         self.create_test_file('ABC2.cio', 1.0)
-        live_files = list(np.array(filehandling.list_live_files())[:, 0])
+        live_files = list(np.array(filehandling.list_live_files(user=self.user))[:, 0])
         self.assertTrue(len(live_files) == 3)
-        filehandling.archive_file('ABC.cio')
-        filehandling.archive_file('ABC1.cio')
-        live_files_with_some_archived = list(np.array(filehandling.list_live_files())[:, 0])
+        filehandling.archive_file('ABC.cio', self.user)
+        filehandling.archive_file('ABC1.cio', self.user)
+        live_files_with_some_archived = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.assertTrue(len(live_files_with_some_archived) == 1 and live_files_with_some_archived == ["ABC2.cio"])
-        filehandling.resurrect_file("ABC.cio")
-        filehandling.resurrect_file("ABC1.cio")
-        live_files_with_some_resurrected = list(np.array(filehandling.list_live_files())[:, 0])
+        filehandling.resurrect_file("ABC.cio", self.user)
+        filehandling.resurrect_file("ABC1.cio", self.user)
+        live_files_with_some_resurrected = list(np.array(filehandling.list_live_files(self.user))[:, 0])
         self.assertTrue(len(live_files_with_some_resurrected) == 3)
         for name in live_files:
             self.assertTrue(name in live_files_with_some_resurrected)
 
     def test_latest_timestamp_is_the_latest_timestamp(self):
-        self.assertTrue(os.path.isdir('TEST_FOLDER'), "expect 'TEST_FOLDER' to be a dir.")
         self.create_test_file('ABC.cio', 1234.5678)
-        self.assertTrue(1234.5678 == filehandling.load_latest_timestamp('ABC.cio'), "Time logged was not correct.")
+        self.assertTrue(1234.5678 == filehandling.load_latest_timestamp('ABC.cio', self.user),
+                        "Time logged was not correct.")
+
+
+class TestUserHandling(unittest.TestCase):
+    def setUp(self) -> None:
+        if not os.path.isfile(userhandling.USER_CATALOG):
+            self.user_catalog = None
+        else:
+            with open(userhandling.USER_CATALOG) as catalog:
+                self.user_catalog = json.load(catalog)
+            os.remove(userhandling.USER_CATALOG)
+
+    def tearDown(self) -> None:
+        if os.path.isfile(userhandling.USER_CATALOG):
+            os.remove(userhandling.USER_CATALOG)
+        if self.user_catalog is None:
+            pass  # it already doesn't exist.
+        else:
+            if not os.path.isdir(app.ADMIN_FOLDER):
+                os.mkdir(app.ADMIN_FOLDER)
+            with open(userhandling.USER_CATALOG, 'w') as catalog:
+                json.dump(self.user_catalog, catalog)
+
+    def test_user_exists_once_registered(self):
+        user = userhandling.UserMethodPack("aaaaabbbbbccccc")
+        self.assertFalse(user.exists(), "User shouldn't be registered.")
+        user.register()
+        self.assertTrue(user.exists(), "User should now be registered.")
 
 
 def create_test_folders():
@@ -181,86 +214,6 @@ def create_test_folders():
         os.remove(app.USER_CATALOG)
     if not os.path.exists(app.UPLOAD_FOLDER):  # Create the test folder
         os.mkdir(app.UPLOAD_FOLDER)
-
-
-class TestLoginProcedure(unittest.TestCase):
-    def setUp(self):
-        app.ADMIN_FOLDER = 'TEST_ADMIN'  # Change admin folder for the test
-        app.USER_CATALOG = os.path.join(app.ADMIN_FOLDER, 'USERS.txt')
-        app.USER_RECENT_CHALLENGES = os.path.join(app.ADMIN_FOLDER, 'CHALLENGES.txt')
-
-    def tearDown(self):
-        clean_admin_test_folder()
-
-    def test_can_create_user(self):
-        self.assertTrue(len(userhandling.get_users()) == 0)  # There should be none.
-        userhandling.create_user('ABCD', '12345')
-        self.assertTrue(len(userhandling.get_users()) == 1)  # Now we have created one.
-        userhandling.create_user('ABCDE', '12345')
-        self.assertTrue(len(userhandling.get_users()) == 2)  # Now we have created two.
-
-    def test_cannot_create_two_of_same_identifier(self):
-        self.assertTrue(len(userhandling.get_users()) == 0)  # There should be none.
-        random_salt = secrets.token_hex(16)
-        self.assertTrue(userhandling.create_user('ABCD', random_salt))
-        self.assertTrue(len(userhandling.get_users()) == 1)  # Now we have created one.
-        self.assertFalse(userhandling.create_user('ABCD', '67890'))
-        self.assertTrue(len(userhandling.get_users()) == 1)  # We still have just one.
-        self.assertTrue(['ABCD', random_salt] in userhandling.get_users(),
-                        '' + str(userhandling.get_users()))
-
-    def test_can_login(self):
-        userhandling.create_user('ABC', secrets.token_hex(16))
-        challenge = userhandling.issue_challenge('ABC')
-        self.assertTrue(userhandling.get_latest_challenge('ABC') == challenge)
-        challenge_response = userhandling.compute_challenge_response(challenge, 'ABC')
-        self.assertTrue(
-            userhandling.validate_challenge_response(
-                'ABC',
-                challenge_response))
-
-    def test_bad_response_cannot_log_in_while_correct_can(self):
-        userhandling.create_user('ABC', secrets.token_hex(16))
-        challenge = userhandling.issue_challenge('ABC')
-        self.assertTrue(userhandling.get_latest_challenge('ABC') == challenge)
-        wrong_response = userhandling.compute_challenge_response(challenge, '')
-        challenge_response = userhandling.compute_challenge_response(challenge, 'ABC')
-        self.assertFalse(userhandling.validate_challenge_response(
-            'ABC', wrong_response
-        ), "Name is '' should not validate.")
-        for i in range(1000):
-            random_string = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(i))
-            wrong_response = userhandling.compute_challenge_response(challenge, random_string)
-            self.assertFalse(userhandling.validate_challenge_response(
-                'ABC', wrong_response
-            ), "Response generated from random name should not validate.")
-        for i in range(1000):
-            random_string = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(i))
-            wrong_response = userhandling.compute_challenge_response(challenge, random_string)
-            self.assertFalse(userhandling.validate_challenge_response(
-                random_string, wrong_response
-            ), "Response generated from random name and matching name should not validate.")
-        for i in range(1000):
-            random_string = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(i))
-            if random_string == 'ABC': continue  # Let's be sure we get the name wrong.
-            self.assertFalse(userhandling.validate_challenge_response(
-                random_string, challenge_response
-            ), "Random name with correct response should not validate.")
-        self.assertTrue(userhandling.validate_challenge_response(
-            'ABC', challenge_response
-        ), "Should be able to log in correctly (assuming timeout hasn't occured).")
-
-    def test_cannot_log_in_as_someone_else_with_own_response(self):
-        user_id_1 = 'ABC'
-        user_id_2 = 'ABCD'
-        random_salt = secrets.token_hex(16)
-        self.assertTrue(userhandling.create_user(user_id_1, random_salt))
-        self.assertTrue(userhandling.create_user(user_id_2, random_salt))
-        challenge_1 = userhandling.issue_challenge('ABC')
-        challenge_response_1 = userhandling.compute_challenge_response(challenge_1, user_id_1)
-        self.assertFalse(userhandling.validate_challenge_response(user_id_2, challenge_response_1))
-        challenge_2 = userhandling.issue_challenge(user_id_2)
-        self.assertFalse(userhandling.validate_challenge_response(user_id_2, challenge_response_1))
 
 
 def clean_admin_test_folder():
