@@ -4,6 +4,7 @@ import string
 import threading
 
 import app
+import filehandling
 from pathing import UPLOAD_FOLDER, ADMIN_FOLDER, ADDITIONAL_DATA_LOG_FILENAME, LIVE_FILES_LOG_FILENAME, USER_CATALOG
 LIVE_FILES_LOG_LOCKS = {}
 ADDITIONAL_DATA_LOG_LOCKS = {}
@@ -60,6 +61,9 @@ class UserMethodPack:
         if not os.path.isfile(USER_CATALOG):
             return False
         else:
+            live_files = filehandling.list_live_files(self)  # archive live files
+            for file, nonce in live_files:
+                filehandling.archive_file(file, self)
             with open(USER_CATALOG, 'r') as catalog:
                 users: dict = json.load(catalog)
             keysToPop = []
