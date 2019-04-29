@@ -223,4 +223,4 @@ if __name__ == '__main__':
         with open(ERROR_LOG, 'w') as error_log_file:  # Errorlog should exist.
             error_log_file.write(('-'*5 + ' CloudIO Error Log ' + '-'*5))  # Create the error log
 
-    app.run(host='0.0.0.0', port=8000, threaded=True)
+    app.run(host='0.0.0.0', port=8001, threaded=True)
