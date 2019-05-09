@@ -62,7 +62,7 @@ class UserMethodPack:
             return False
         else:
             live_files = filehandling.list_live_files(self)  # archive live files
-            for file, nonce in live_files:
+            for file, nonce, ts in live_files:
                 filehandling.archive_file(file, self)
             with open(USER_CATALOG, 'r') as catalog:
                 users: dict = json.load(catalog)

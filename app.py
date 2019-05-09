@@ -8,6 +8,7 @@ import filehandling
 import userhandling
 from pathing import write_to_error_log, RESOURCE_DIR, ADMIN_FOLDER, UPLOAD_FOLDER, ERROR_LOG
 
+
 ALLOWED_EXTENSIONS = {'cio'}  # Our madeup fileext indicating that it has been encrypted; not to be confused with SWAT.
 
 
