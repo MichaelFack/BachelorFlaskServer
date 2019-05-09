@@ -25,9 +25,10 @@ def list_live_files(user: userhandling.UserMethodPack):  # In Admin there exists
     live_files = []
     for name, isLive in data.items():
         if isLive:
-            live_files.append([name, load_additional_data(
+            add_dat = load_additional_data(
                 latest_filename_version(name, user), user
-            )['nonce1']])
+            )
+            live_files.append([name, add_dat['nonce1'], add_dat["t"]])
     return live_files
 
 
